@@ -1,6 +1,8 @@
 import com.google.common.collect.Sets
 import org.apache.commons.csv.CSVFormat
 import kotlin.math.abs
+import kotlin.math.pow
+import kotlin.math.sqrt
 
 fun main(args: Array<String>) {
     val CSVReader = CSVFormat.Builder.create(CSVFormat.DEFAULT).apply {
@@ -48,10 +50,10 @@ fun main(args: Array<String>) {
     }
 }
 
-fun getTopNSplits(planets: List<Planet>, n: Int): Collection<Pair<Double, Pair<Set<Planet>, Set<Planet>>>> {
+fun getTopNSplits(planets: List<Planet>, n: Int): LinkedHashSet<Pair<Double, Pair<Set<Planet>, Set<Planet>>>> {
     val splits: Sequence<Pair<Set<Planet>, Set<Planet>>> = preScreenSplits(generateSplits(planets))
 
-    val results: MutableList<Pair<Double, Pair<Set<Planet>, Set<Planet>>>> = mutableListOf()
+    val results: LinkedHashSet<Pair<Double, Pair<Set<Planet>, Set<Planet>>>> = linkedSetOf()
 
     for (potential in splits) {
         results.addAndKeepTopN(potential, n)
@@ -92,9 +94,14 @@ fun generateSplits(planets: List<Planet>): Sequence<Pair<Set<Planet>, Set<Planet
 }
 
 fun Pair<Set<Planet>, Set<Planet>>.getDistance(): Double {
-    return this.getDistance { it.naturalResources } / 10.0 +
+    return (
+            this.getDistance { it.naturalResources } / 10.0 +
             this.getDistance { it.industry } +
             this.getDistance { it.science }
+    ) * 1000 +
+            this.first.meanDistance() * 10 +
+            this.second.meanDistance() * 10 +
+            abs(this.first.size - this.second.size)
 }
 
 fun Pair<Set<Planet>, Set<Planet>>.getDistance(sumField: (Planet) -> Int): Int {
@@ -104,15 +111,29 @@ fun Pair<Set<Planet>, Set<Planet>>.getDistance(sumField: (Planet) -> Int): Int {
     return abs(sum1 - sum2)
 }
 
-fun MutableList<Pair<Double, Pair<Set<Planet>, Set<Planet>>>>.addAndKeepTopN(
+fun LinkedHashSet<Pair<Double, Pair<Set<Planet>, Set<Planet>>>>.addAndKeepTopN(
     element: Pair<Set<Planet>, Set<Planet>>,
     n: Int
 ) {
     this.add(Pair(element.getDistance(), element))
-    this.sortBy { it.first }
-    while (this.size > n) {
-        this.removeLast()
+    val sorted = this.sortedBy { it.first }.toMutableList()
+
+    while (sorted.size > n) {
+        sorted.removeLast()
     }
+
+    this.clear()
+    this.addAll(sorted)
+}
+
+fun Set<Planet>.meanDistance(): Double {
+    val summedPoint = this.map { it.x to it.y }
+        .reduce { acc, pair -> acc.first + pair.first to acc.second + pair.second }
+    val averagePoint = summedPoint.first / this.size to summedPoint.second / this.size
+
+    return this.sumOf {
+        sqrt((averagePoint.first - it.x).pow(2) + (averagePoint.second - it.y).pow(2))
+    } / this.size
 }
 
 data class Planet(
